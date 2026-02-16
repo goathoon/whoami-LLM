@@ -1,6 +1,7 @@
 # k8s-local-ai-platform
+Run one command to learn who you are — from your technical blog
 
-Minikube 기반 로컬 Kubernetes 환경에서 AI 관련 컴포넌트(MinIO, Weaviate)를 Helm으로 설치/테스트하는 저장소입니다.
+기술블로그를 읽고 “이 개발자는 누구인가?”를 답하는 Personal RAG LLM
 
 ## 현재 구성
 
