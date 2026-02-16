@@ -30,7 +30,7 @@ echo "[INFO] Access Key: ${ROOT_USER:-<check apps/minio/values.yaml>}"
 echo "[INFO] Secret Key: ${ROOT_PASSWORD:-<check apps/minio/values.yaml>}"
 echo "[INFO] Press Ctrl+C to stop port-forward"
 
-kubectl -n "${NAMESPACE}" port-forward svc/"${RELEASE_NAME}" "${API_PORT}":9000 >/tmp/minio-api-forward.log 2>&1 &
+kubectl -n "${NAMESPACE}" port-forward svc/"${RELEASE_NAME}" "${API_PORT}":9000 2>&1 &
 API_PID=$!
 kubectl -n "${NAMESPACE}" port-forward svc/"${RELEASE_NAME}-console" "${CONSOLE_PORT}":9001 2>&1 &
 CONSOLE_PID=$!
