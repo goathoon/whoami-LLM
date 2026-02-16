@@ -1,5 +1,7 @@
 import typer
 import json
+import shutil
+from pathlib import Path
 
 from whoami_llm.extract.velog_rss_description import description_to_text
 from whoami_llm.storage.document_store import write_documents,documents_file
@@ -13,10 +15,13 @@ from whoami_llm.velog.rss import extract_username
 from whoami_llm.chunking.chunker import ChunkConfig, chunk_text, count_tokens
 from whoami_llm.embedding.faiss_builder import EmbedConfig, build_faiss_index
 from whoami_llm.storage.index_store import faiss_index_file, meta_file, embed_info_file
-from whoami_llm.search.faiss_searcher import search_faiss
+from whoami_llm.search.faiss_searcher import search_faiss_advanced
+from whoami_llm.llm.llama_cli_runner import run_llama_cli
 
 
 app = typer.Typer()
+DEFAULT_RAG_MODEL_PATH = Path(__file__).resolve().parents[2] / "qwen.gguf"
+DEFAULT_LLAMA_CLI_PATH = Path(__file__).resolve().parents[2] / "llama-cli-cpu"
 
 def _print_chunk_config(cfg: ChunkConfig):
     typer.echo(
@@ -66,6 +71,51 @@ def _extract_docs_from_posts(posts, min_chars: int):
         typer.echo(f"[{i}/{len(posts)}] Extracted {char_count:,} chars from RSS description.")
 
     return docs, warn_count
+
+
+def _build_rag_prompt(query: str, results: list, context_chars: int) -> str:
+    blocks: list[str] = []
+    for i, res in enumerate(results, start=1):
+        meta = res.meta
+        title = meta.get("title") or "(no title)"
+        url = meta.get("url") or ""
+        text = (meta.get("text") or "").strip().replace("\n", " ")
+        text = text[:context_chars]
+        blocks.append(
+            f"[CONTEXT {i}]\n"
+            f"title: {title}\n"
+            f"url: {url}\n"
+            f"text: {text}\n"
+        )
+
+    context = "\n".join(blocks)
+    return (
+        "You are an expert technical interviewer and writing coach.\n\n"
+        "Goal:\n"
+        "Evaluate the blog author’s engineering profile and strengths using:\n"
+        "1) General software engineering knowledge (your training),\n"
+        "2) The supplied blog context as primary evidence.\n\n"
+        "Rules:\n"
+        "- You MAY use general knowledge to interpret and frame what the context implies (e.g., what a technique typically signals, common tradeoffs).\n"
+        "- You MUST NOT invent specific facts about the author that are not supported by the context.\n"
+        "- Separate what is directly evidenced vs. what is inferred.\n"
+        "- When you infer, explicitly mark it as an inference and explain why it follows from the context.\n"
+        "- If key details are missing, state what is missing and provide reasonable assumptions or alternative interpretations.\n\n"
+        "Output format (Korean):\n"
+        "1) 한 줄 요약 (이 개발자는 어떤 엔지니어인가)\n"
+        "2) Evidence 기반 강점 5개\n"
+        "   - 각 항목마다: 주장 → 근거 [CONTEXT n] → 해석(일반지식 기반)\n"
+        "3) 기술적 깊이/성숙도 평가 (0~5 스케일로)\n"
+        "   - 성능/운영, 분산시스템, 데이터/DB, 테스트/품질, 커뮤니케이션/문서화\n"
+        "   - 각 점수마다 근거 [CONTEXT n] 또는 \"컨텍스트 부족\"\n"
+        "4) 리스크/한계 3개 (컨텍스트로 관찰되는 약점)\n"
+        "5) 다음 성장 방향 5개 (가장 임팩트 큰 순)\n"
+        "6) 면접에서 물어볼 질문 8개 (컨텍스트 기반으로 깊이를 검증하는 질문)\n\n"
+        f"Question:\n{query}\n\n"
+        f"Context:\n{context}\n\n"
+        "Answer in Korean:"
+
+    )
 
 
 @app.command()
@@ -231,6 +281,11 @@ def search(
     blog: str = typer.Option(..., "--blog"),
     top_k: int = typer.Option(5, "--top-k"),
     model: str | None = typer.Option(None, "--model", help="(옵션) 임베딩 모델 override"),
+    retrieval_mode: str = typer.Option(
+        "auto",
+        "--retrieval-mode",
+        help="retrieval 모드: auto | semantic | persona",
+    ),
     show_chars: int = typer.Option(280, "--show-chars", help="본문 미리보기 길이"),
 ):
     """
@@ -242,13 +297,14 @@ def search(
     m_path = meta_file(username)
     info_path = embed_info_file(username)
 
-    results = search_faiss(
+    results = search_faiss_advanced(
         query=query,
         index_path=idx_path,
         meta_path=m_path,
         info_path=info_path,
         top_k=top_k,
         model_override=model,
+        retrieval_mode=retrieval_mode,
     )
 
     if not results:
@@ -271,6 +327,74 @@ def search(
             typer.echo(f"    url:   {url}")
         typer.echo(f"    text:  {preview}")
         typer.echo("-" * 80)
+
+
+@app.command()
+def rag(
+    query: str = typer.Argument(..., help="최종 질의 (예: 이 개발자는 어떤 엔지니어인가?)"),
+    blog: str = typer.Option(..., "--blog"),
+    top_k: int = typer.Option(5, "--top-k"),
+    retrieval_mode: str = typer.Option(
+        "auto",
+        "--retrieval-mode",
+        help="retrieval 모드: auto | semantic | persona",
+    ),
+    model: str | None = typer.Option(None, "--model", help="로컬 GGUF 파일 경로 (기본: whoami-llm/qwen.gguf)"),
+    llama_cli: str = typer.Option(
+        str(DEFAULT_LLAMA_CLI_PATH) if DEFAULT_LLAMA_CLI_PATH.exists() else "llama-cli",
+        "--llama-cli",
+        help="llama-cli 실행파일 경로",
+    ),
+    max_tokens: int = typer.Option(256, "--max-tokens"),
+    temperature: float = typer.Option(0.2, "--temperature"),
+    context_chars: int = typer.Option(1200, "--context-chars"),
+):
+    """
+    query -> FAISS 검색 -> context 구성 -> llama-cli로 최종 답변 생성
+    """
+    username = extract_username(blog)
+
+    results = search_faiss_advanced(
+        query=query,
+        index_path=faiss_index_file(username),
+        meta_path=meta_file(username),
+        info_path=embed_info_file(username),
+        top_k=top_k,
+        retrieval_mode=retrieval_mode,
+    )
+
+    if not results:
+        typer.echo("No retrieval results. Run build/chunk/embed first.")
+        raise typer.Exit(code=1)
+
+    model_path = Path(model).expanduser().resolve() if model else DEFAULT_RAG_MODEL_PATH.resolve()
+    if not model_path.exists():
+        raise typer.BadParameter(f"model file not found: {model_path}")
+
+    if "/" in llama_cli or "\\" in llama_cli or llama_cli.startswith("."):
+        llama_cli_path = Path(llama_cli).expanduser().resolve()
+        if not llama_cli_path.exists():
+            raise typer.BadParameter(f"llama-cli file not found: {llama_cli_path}")
+        llama_cli = str(llama_cli_path)
+    else:
+        if shutil.which(llama_cli) is None:
+            raise typer.BadParameter(
+                f"llama-cli executable not found in PATH: {llama_cli}. "
+                "Use --llama-cli /absolute/path/to/llama-cli"
+            )
+
+    prompt = _build_rag_prompt(query=query, results=results, context_chars=context_chars)
+    typer.echo("Generating final answer with llama-cli...")
+    answer = run_llama_cli(
+        llama_cli=llama_cli,
+        model_path=model_path,
+        prompt=prompt,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
+    typer.echo("-" * 80)
+    typer.echo(answer)
+    typer.echo("-" * 80)
 
 
 if __name__ == "__main__":

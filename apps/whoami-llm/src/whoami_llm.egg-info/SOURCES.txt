@@ -1,3 +1,4 @@
+README.md
 pyproject.toml
 src/whoami_llm/__init__.py
 src/whoami_llm/cli.py
@@ -10,6 +11,9 @@ src/whoami_llm.egg-info/top_level.txt
 src/whoami_llm/chunking/chunker.py
 src/whoami_llm/embedding/faiss_builder.py
 src/whoami_llm/extract/velog_rss_description.py
+src/whoami_llm/llm/__init__.py
+src/whoami_llm/llm/hf_gguf.py
+src/whoami_llm/llm/llama_cli_runner.py
 src/whoami_llm/search/faiss_searcher.py
 src/whoami_llm/storage/__init__.py
 src/whoami_llm/storage/chunk_store.py

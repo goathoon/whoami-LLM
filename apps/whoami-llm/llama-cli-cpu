@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+LLAMA_BIN="$SCRIPT_DIR/llama.cpp/build/bin/llama-cli"
+
+if [[ ! -x "$LLAMA_BIN" ]]; then
+  echo "llama-cli not found: $LLAMA_BIN" >&2
+  echo "Build first:" >&2
+  echo "  cmake -S $SCRIPT_DIR/llama.cpp -B $SCRIPT_DIR/llama.cpp/build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON" >&2
+  echo "  cmake --build $SCRIPT_DIR/llama.cpp/build --config Release --target llama-cli -j8" >&2
+  exit 1
+fi
+
+# Force CPU backend to avoid Metal init issues in this environment.
+# Ensure a single-turn response for non-interactive callers.
+exec "$LLAMA_BIN" --device none --single-turn "$@"

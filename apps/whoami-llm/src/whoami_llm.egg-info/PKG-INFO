@@ -1,4 +1,4 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: whoami-llm
 Version: 0.1.0
 Summary: Ask who someone is based on their Velog posts (local RAG).
@@ -12,3 +12,4 @@ Requires-Dist: sentence-transformers>=2.7.0
 Requires-Dist: faiss-cpu>=1.8.0
 Requires-Dist: numpy>=1.26.4
 Requires-Dist: tqdm>=4.66.0
+Requires-Dist: huggingface-hub>=0.25.0

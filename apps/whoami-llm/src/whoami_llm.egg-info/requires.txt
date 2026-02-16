@@ -7,3 +7,4 @@ sentence-transformers>=2.7.0
 faiss-cpu>=1.8.0
 numpy>=1.26.4
 tqdm>=4.66.0
+huggingface-hub>=0.25.0
