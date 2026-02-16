@@ -1,0 +1,3 @@
+.venv-weaviate/
+__pycache__/
+*.pyc
