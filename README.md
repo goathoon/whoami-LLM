@@ -1,119 +1,86 @@
 # k8s-local-ai-platform
-Run one command to learn who you are — from your technical blog
 
-기술블로그를 읽고 “이 개발자는 누구인가?”를 답하는 Personal RAG LLM
+Velog 글을 기반으로 로컬에서 Personal RAG를 실행해
+"이 개발자는 누구인가?"를 답하는 CLI 프로젝트입니다.
 
-## 현재 구성
+## Local CLI Quick Start
 
-```text
-.
-├── Makefile
-├── scripts/
-│   └── setup-cluster.sh
-└── apps/
-    ├── minio/
-    │   ├── values.yaml
-    │   └── scripts/
-    │       ├── install.sh
-    │       ├── access.sh
-    │       └── uninstall.sh
-    └── weaviate/
-        ├── values.yaml
-        ├── README.md
-        ├── scripts/
-        │   ├── install.sh
-        │   ├── access.sh
-        │   ├── setup-python.sh
-        │   ├── run-test.sh
-        │   └── uninstall.sh
-        └── python/
-            ├── requirements.txt
-            └── test_embedding_to_weaviate.py
-```
+상세 가이드는 `apps/whoami-llm/README.md`를 참고하세요.
 
-## 사전 요구사항
+### 1) 요구사항
 
-- `minikube`
-- `kubectl`
-- `helm`
-- (Weaviate Python 테스트 시) `python3`, `venv`
+- `python3` (권장 3.10+)
+- `pip`
+- `cmake`
+- `git` (submodule 초기화용)
+- 모델 파일: `apps/whoami-llm/qwen.gguf`
 
-## 빠른 시작
+### 2) 저장소/서브모듈 준비
 
-### 1) 클러스터 준비
+처음 clone:
 
 ```bash
-make cluster-setup
+git clone --recurse-submodules <REPO_URL>
+cd k8s-local-ai-platform
 ```
 
-옵션 예시:
+이미 clone 되어 있다면:
 
 ```bash
-make cluster-setup MINIKUBE_PROFILE=local MINIKUBE_CPUS=6 MINIKUBE_MEMORY=12288 MINIKUBE_DISK_SIZE=40g
-make cluster-setup MINIKUBE_DRIVER=docker
+git submodule sync --recursive
+git submodule update --init --recursive apps/whoami-llm/llama.cpp
 ```
 
-### 2) MinIO 설치/접속/제거
+### 3) qwen.gguf 다운로드
 
 ```bash
-make minio-install
-make minio-access
-make minio-status
-make minio-logs
-make minio-uninstall
+pip install -U "huggingface_hub[cli]"
+huggingface-cli download <HF_REPO> <GGUF_FILE> --local-dir apps/whoami-llm
+mv apps/whoami-llm/<GGUF_FILE> apps/whoami-llm/qwen.gguf
 ```
 
-- 기본 네임스페이스: `minio`
-- 기본 포트포워딩:
-  - API: `http://127.0.0.1:9000`
-  - Console: `http://127.0.0.1:9001`
-- 기본 계정은 `apps/minio/values.yaml`의 `rootUser`, `rootPassword`를 사용합니다.
-
-### 3) Weaviate 설치/접속/제거
+대체(`curl`):
 
 ```bash
-make weaviate-install
-make weaviate-access
-make weaviate-status
-make weaviate-logs
-make weaviate-uninstall
+curl -L "https://huggingface.co/<HF_REPO>/resolve/main/<GGUF_FILE>?download=true" \
+  -o apps/whoami-llm/qwen.gguf
 ```
 
-- 기본 네임스페이스: `weaviate`
-- 기본 포트포워딩:
-  - HTTP: `http://127.0.0.1:8080`
-  - gRPC: `127.0.0.1:50051` (서비스 존재 시)
-- Readiness 체크:
+### 4) Python 환경 설치
 
 ```bash
-curl -s http://127.0.0.1:8080/v1/.well-known/ready && echo
+python3 -m venv .venv-whoami
+source .venv-whoami/bin/activate
+pip install -e apps/whoami-llm
 ```
 
-### 4) Weaviate Python 테스트
-
-`Makefile`에는 Python 환경/테스트용 타겟이 없으므로 스크립트를 직접 실행합니다.
+### 5) llama-cli 빌드
 
 ```bash
-bash apps/weaviate/scripts/setup-python.sh
-bash apps/weaviate/scripts/run-test.sh
+cmake -S apps/whoami-llm/llama.cpp -B apps/whoami-llm/llama.cpp/build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON
+cmake --build apps/whoami-llm/llama.cpp/build --config Release --target llama-cli -j8
 ```
 
-또는 이미 가상환경이 준비된 경우:
+권장 실행파일: `apps/whoami-llm/llama-cli-cpu`
+
+### 6) 인덱스 생성
 
 ```bash
-make weaviate-test
+whoami-llm build --blog https://velog.io/@<username>/posts
+whoami-llm chunk --blog https://velog.io/@<username>/posts
+whoami-llm embed --blog https://velog.io/@<username>/posts
 ```
 
-## 설정 파일
-
-- MinIO Helm values: `apps/minio/values.yaml`
-- Weaviate Helm values: `apps/weaviate/values.yaml`
-
-네임스페이스/릴리즈명/values 경로는 `Makefile` 변수 오버라이드로 변경할 수 있습니다.
-
-예시:
+### 7) RAG 실행
 
 ```bash
-make minio-install NAMESPACE=storage RELEASE_NAME=minio-local
-make weaviate-install WEAVIATE_NAMESPACE=vector WEAVIATE_RELEASE_NAME=weaviate-local
+whoami-llm rag "이 개발자는 어떤 엔지니어인가?" \
+  --blog https://velog.io/@<username>/posts \
+  --retrieval-mode auto \
+  --llama-cli "$(python3 -c 'from pathlib import Path; print((Path("apps/whoami-llm/llama-cli-cpu")).resolve())')"
 ```
+
+## Related Docs
+
+- 상세 로컬 CLI 가이드: `apps/whoami-llm/README.md`
+- Retrieval 설계: `apps/whoami-llm/docs/retrieval-architecture.md`
