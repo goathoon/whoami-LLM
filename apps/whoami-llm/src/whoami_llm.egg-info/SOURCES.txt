@@ -8,10 +8,13 @@ src/whoami_llm.egg-info/entry_points.txt
 src/whoami_llm.egg-info/requires.txt
 src/whoami_llm.egg-info/top_level.txt
 src/whoami_llm/chunking/chunker.py
+src/whoami_llm/embedding/faiss_builder.py
 src/whoami_llm/extract/velog_rss_description.py
+src/whoami_llm/search/faiss_searcher.py
 src/whoami_llm/storage/__init__.py
 src/whoami_llm/storage/chunk_store.py
 src/whoami_llm/storage/document_store.py
+src/whoami_llm/storage/index_store.py
 src/whoami_llm/storage/jsonl_store.py
 src/whoami_llm/velog/models.py
 src/whoami_llm/velog/rss.py

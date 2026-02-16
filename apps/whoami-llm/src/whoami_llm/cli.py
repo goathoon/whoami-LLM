@@ -12,6 +12,9 @@ from whoami_llm.velog.rss import extract_username
 
 from whoami_llm.chunking.chunker import ChunkConfig, chunk_text, count_tokens
 from whoami_llm.embedding.faiss_builder import EmbedConfig, build_faiss_index
+from whoami_llm.storage.index_store import faiss_index_file, meta_file, embed_info_file
+from whoami_llm.search.faiss_searcher import search_faiss
+
 
 app = typer.Typer()
 
@@ -221,6 +224,53 @@ def embed(
     )
 
     typer.echo("✅ Embedding + FAISS index build done.")
+
+@app.command()
+def search(
+    query: str = typer.Argument(..., help="검색 질의 (예: MongoDB)"),
+    blog: str = typer.Option(..., "--blog"),
+    top_k: int = typer.Option(5, "--top-k"),
+    model: str | None = typer.Option(None, "--model", help="(옵션) 임베딩 모델 override"),
+    show_chars: int = typer.Option(280, "--show-chars", help="본문 미리보기 길이"),
+):
+    """
+    query -> embedding -> FAISS top-k -> meta 출력
+    """
+    username = extract_username(blog)
+
+    idx_path = faiss_index_file(username)
+    m_path = meta_file(username)
+    info_path = embed_info_file(username)
+
+    results = search_faiss(
+        query=query,
+        index_path=idx_path,
+        meta_path=m_path,
+        info_path=info_path,
+        top_k=top_k,
+        model_override=model,
+    )
+
+    if not results:
+        typer.echo("No results.")
+        raise typer.Exit(code=0)
+
+    typer.echo(f'🔎 Query: "{query}" (top_k={top_k})')
+    typer.echo("-" * 80)
+
+    for res in results:
+        meta = res.meta
+        title = meta.get("title") or "(no title)"
+        url = meta.get("url") or ""
+        text = (meta.get("text") or "").replace("\n", " ").strip()
+        preview = text[:show_chars] + ("…" if len(text) > show_chars else "")
+
+        typer.echo(f"[{res.rank}] score={res.score:.4f}")
+        typer.echo(f"    title: {title}")
+        if url:
+            typer.echo(f"    url:   {url}")
+        typer.echo(f"    text:  {preview}")
+        typer.echo("-" * 80)
 
 
 if __name__ == "__main__":
