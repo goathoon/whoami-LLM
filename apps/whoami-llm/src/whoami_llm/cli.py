@@ -4,10 +4,14 @@ import json
 from whoami_llm.extract.velog_rss_description import description_to_text
 from whoami_llm.storage.document_store import write_documents,documents_file
 from whoami_llm.storage.jsonl_store import save_posts, posts_file
-from whoami_llm.storage.chunk_store import write_chunks
+from whoami_llm.storage.chunk_store import write_chunks, chunks_file
+from whoami_llm.storage.index_store import faiss_index_file, meta_file, embed_info_file
+
 from whoami_llm.velog.rss import fetch_posts, extract_username
 from whoami_llm.velog.rss import extract_username
+
 from whoami_llm.chunking.chunker import ChunkConfig, chunk_text, count_tokens
+from whoami_llm.embedding.faiss_builder import EmbedConfig, build_faiss_index
 
 app = typer.Typer()
 
@@ -187,6 +191,37 @@ def chunk(
     typer.echo(f"Total docs: {total_docs}")
     typer.echo(f"Total chunks created: {total_chunks}")
     typer.echo(f"Saved -> {out}")
+
+
+@app.command()
+def embed(
+    blog: str = typer.Option(..., "--blog"),
+    model: str = typer.Option("sentence-transformers/all-MiniLM-L6-v2"),
+    batch_size: int = typer.Option(64),
+    no_normalize: bool = typer.Option(False),
+):
+    username = extract_username(blog)
+    cfile = chunks_file(username)
+
+    if not cfile.exists():
+        raise typer.BadParameter("Run chunk first")
+
+    cfg = EmbedConfig(
+        model_name=model,
+        batch_size=batch_size,
+        normalize=not no_normalize,
+    )
+
+    build_faiss_index(
+        chunks_path=cfile,
+        index_path=faiss_index_file(username),
+        meta_path=meta_file(username),
+        info_path=embed_info_file(username),
+        cfg=cfg,
+    )
+
+    typer.echo("✅ Embedding + FAISS index build done.")
+
 
 if __name__ == "__main__":
     app()

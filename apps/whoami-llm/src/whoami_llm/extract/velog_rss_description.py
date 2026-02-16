@@ -12,9 +12,9 @@ def description_to_text(description: str | None) -> str:
     desc = description or ""
 
     h = html2text.HTML2Text()
-    h.ignore_links = True     # 증거 링크 남김
+    h.ignore_links = True    
     h.ignore_images = True
-    h.body_width = 0           # 강제 줄바꿈 X
+    h.body_width = 0          
     h.single_line_break = True
 
     text = h.handle(desc)
