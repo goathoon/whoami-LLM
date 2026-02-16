@@ -14,9 +14,25 @@ Velog 글 기반으로 개인 RAG를 구성하고, `llama-cli`로 최종 답변�
 - `pip`
 - `cmake` (llama.cpp 빌드용)
 - `apps/whoami-llm/qwen.gguf` 파일
+- `apps/whoami-llm/llama.cpp` submodule 초기화
 
 > 참고: `qwen.gguf`는 용량 문제로 저장소에 포함되지 않을 수 있습니다.
 > 직접 `apps/whoami-llm/qwen.gguf` 경로에 두거나 `--model /absolute/path/to/model.gguf`로 대체 모델 경로를 지정하세요.
+
+### submodule 초기화
+
+처음 clone 시:
+
+```bash
+git clone --recurse-submodules <REPO_URL>
+```
+
+이미 clone 한 경우:
+
+```bash
+git submodule sync --recursive
+git submodule update --init --recursive apps/whoami-llm/llama.cpp
+```
 
 ### qwen.gguf 다운로드 예시
 

@@ -1,0 +1,6 @@
+[submodule "apps/whoami-llm/llama.cpp"]
+	path = apps/whoami-llm/llama.cpp
+	url = https://github.com/ggerganov/llama.cpp
+[submodule "apps/apps/whoami-llm/llama.cpp"]
+	path = apps/apps/whoami-llm/llama.cpp
+	url = https://github.com/ggerganov/llama.cpp
