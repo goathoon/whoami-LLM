@@ -21,7 +21,7 @@ curl http://localhost:8080/v1/.well-known/ready
 ## 3) Python 환경 구성
 
 ```bash
-make weaviate-py-setup
+bash apps/weaviate/scripts/setup-python.sh
 ```
 
 가상환경 위치: `.venv-weaviate`
@@ -29,8 +29,12 @@ make weaviate-py-setup
 ## 4) 임베딩 생성 + Vector DB 저장 테스트
 
 ```bash
-python apps/weaviate/python/test_embedding_to_weaviate.py
+bash apps/weaviate/scripts/run-test.sh
 ```
+혹은 
+```bash
+make weaviate-test
+````
 
 테스트 스크립트는 아래를 수행합니다.
 
@@ -50,12 +54,4 @@ make weaviate-logs
 
 ```bash
 make weaviate-uninstall
-```
-
-## (옵션) Docker Compose로만 빠르게 테스트
-
-```bash
-make weaviate-compose-up
-make weaviate-compose-logs
-make weaviate-compose-down
 ```
